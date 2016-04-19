@@ -21,24 +21,32 @@ MAX_LEN = 14
 
 if len(sys.argv) <= MAX_LEN:
 	count = len(sys.argv) - 4
-else
+else:
 	count = MAX_LEN - 4
 
+data[1] = count
+
 j = 2
-for i in range(4, count):
-	if(i % 2 = 0){
-		data[j] = (int(sys.argv[i])) << 4
-	}
-	else
-		data[j] = data[j] | sys.argv[i]
+for i in range(0, count):
+	if(i % 2 == 0):
+		data[j] = (int(sys.argv[i + 4])) << 4
+	else:
+		data[j] = data[j] | int(sys.argv[i + 4])
 		j = j + 1
 
 s.sendall(data)
 
-data = s.recv(1024)
-data = int(data[0])
+data = s.recv(2048)
 
-print(data)
+finalResult = (int(data[0])) << 24
+finalResult += (int(data[1])) << 16
+finalResult += (int(data[2])) << 8
+finalResult += (int(data[3]))
+
+if (finalResult >= (2**31)):
+	finalResult -= (2**32)
+
+print(finalResult)
 
 
 
