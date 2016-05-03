@@ -19,8 +19,21 @@ if command ==  "GET":
 	s.send("GET".encode("UTF-8"))
 elif command == "PUT":
 	s.send("PUT".encode("UTF-8"))
-	okC = s.recv(1024).decode("UTF-8")	
 
+	size = os.path.getsize(filename)
+	s.send(size.to_bytes(8, byteorder='big', signed=False))
+	f = open(filename, "rb")
+	
+	while size > 0:
+		data = f.read(1024)
+		s.send(data)
+		size -= len(data)
+	f.close()
+	
+	#ok
+	okC = s.recv(1024).decode("UTF-8")	
+	print(okC)
+	
 elif command == "DEL":
 	s.send("DEL".encode("UTF-8"))
 
