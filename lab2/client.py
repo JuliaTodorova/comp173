@@ -7,9 +7,9 @@ filename = sys.argv[4]
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-if not os.access(filename, os.R_OK) or not os.path.isfile(filename):
-	print("No access to file: " + filename)
-	sys.exit(1)
+# if not os.access(filename, os.R_OK) or not os.path.isfile(filename):
+# 	print("No access to file: " + filename)
+# 	sys.exit(1)
 
 s.connect((server, port))
 
@@ -30,11 +30,10 @@ elif command == "PUT":
 		size -= len(data)
 	f.close()
 	
-	#ok
 	okC = s.recv(1024).decode("UTF-8")	
-	print(okC)
-	
+
 elif command == "DEL":
 	s.send("DEL".encode("UTF-8"))
+	s.send(filename.encode("UTF-8")) 
 
 s.close()

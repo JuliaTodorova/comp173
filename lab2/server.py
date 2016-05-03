@@ -1,4 +1,4 @@
-import socket, sys
+import socket, sys, os
 
 port = int(sys.argv[1])
 
@@ -11,12 +11,13 @@ while True:
 	conn.send("READY".encode("UTF-8"))
 
 	command = conn.recv(1024).decode("UTF-8")
-
+	print("mah command be:", command)
 	if command == "GET":
-		pass
+		print("gimme gimme gimme GET")
+	
 	elif command == "PUT":
-		# Put
-		data = conn.recv(8)
+		print("but mommy I want to PUT")
+		data = conn.recv(1024)
 		size = int.from_bytes(data, byteorder='big', signed=False)
 		f = open("received.jpg", "wb")
 		while size > 0:
@@ -27,5 +28,12 @@ while True:
 		conn.send("OK".encode("UTF-8"))
 		data = conn.recv(1024)
 		conn.close()
+	
 	elif command == "DEL":
-		pass
+		name = conn.recv(1024).decode("UTF-8")
+		print("doing the DEL")
+		if os.path.exists(name):
+			print("found dat file yo")
+			os.remove(name)
+		else:
+			print("file does not exist")	
