@@ -11,16 +11,21 @@ while True:
 	conn.send("READY".encode("UTF-8"))
 
 	data = conn.recv(1024).decode("UTF-8")
-	command = data[0:3]
-	filename = data[3:]
+	dataArray = data.split()
+	command = dataArray[0]
+	filename = dataArray[1]
+
 	if command == "GET":
 		if os.access(filename, os.R_OK):
 			conn.send("OK".encode("UTF-8"))
-			
-			size = os.path.getsize(filename)
-			conn.send(size.to_bytes(1024, byteorder='big', signed=False))
-			f = open(filename, "rb")
+			ready = conn.recv(1024).decode("UTF-8")
 
+			size = os.path.getsize(filename)
+			conn.send(size.to_bytes(8, byteorder='big', signed=False))
+
+			ok = conn.recv(1024).decode("UTF-8")
+
+			f = open(filename, "rb")
 			while size > 0:
 				data = f.read(1024)
 				conn.send(data)
@@ -38,9 +43,6 @@ while True:
 		
 		data = conn.recv(1024)
 		size = int.from_bytes(data, byteorder='big', signed=False)
-		print(size)
-		conn.send("OK".encode("UTF-8"))
-
 		f = open(filename, "wb")
 		while size > 0:
 			data = conn.recv(1024)
@@ -54,4 +56,5 @@ while True:
 	elif command == "DEL":
 		if os.path.exists(filename):
 			os.remove(filename)
+			conn.send("DONE".encode("UTF-8"))
 		conn.close()
