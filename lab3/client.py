@@ -1,66 +1,121 @@
 import socket, sys, os
-GET_RESOURCE = 1
-TRANSCODE = 2
-PRINTING = 3
-DONE = 4
 
-URL = sys.argv[1]
-splitURL = URL.split("/")
-webhost = splitURL[2]
+# Utilities functions
+###################################################################################################
 
-if len(splitURL) == 3:
-	resource = "/"
-else: 
-	resource = "/" + splitURL[3]
+def getRequestInfo():
+    url = sys.argv[1]
+    urlSplits = url.split("/")
 
-s1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s1.connect( (webhost, 80) )
-s1.send(("GET " + resource + " HTTP/1.1\n" + "Host: " + webhost + "\n\n").encode("UTF-8"))
+    host = urlSplits[2]
 
-s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s2.connect( ("rtvm.cs.camosun.bc.ca", 10010) )
-data = s2.recv(1024)
+    if len(urlSplits) == 3:
+    	resource = "/"
+    else:
+    	resource = "/" + urlSplits[3]
 
-state = GET_RESOURCE
-previous = ""
+    return { "host": host, "resource": resource }
 
-while (state != DONE):
-	if (state == GET_RESOURCE): 
-		current = s1.recv(1024).decode("UTF-8")
-		current_window = previous + current
-		if ("<HTML>" in current_window.upper()):
-			tag_index = current_window.upper().index("<HTML>")
-			previous = current_window[tag_index:]
-			state = TRANSCODE
-			
-			if ("</HTML>" in (previous).upper()):
-				tag_index = previous.upper().index("</HTML>")
-				s2.send(previous[:tag_index + 7].encode("UTF-8"))
-				state = PRINTING
-				previous = ""
-			
-	elif (state == TRANSCODE): 
-			current = s1.recv(1024).decode("UTF-8")
-			current_window = previous + current
-			if ("</HTML>" in current_window.upper()):
-				tag_index = current_window.upper().index("</HTML>")
-				s2.send(current_window[:tag_index + 7].encode("UTF-8"))
-				state = PRINTING
-				previous = ""
-			else:
-				s2.send(previous.encode("UTF-8"))
-				previous = current
-				
-	elif (state == PRINTING): 
-		current = s2.recv(1024).decode("ASCII")
-		current_window = previous + current
-		if ("COMP173" in current_window.upper()):
-			tag_index = current_window.upper().index("COMP173")
-			print(current_window[:tag_index], end='')
-			state = DONE
-		else:
-			print(previous, end='')
-			previous = current
-			
-s1.close()
-s2.close()
+def getSocket(host, port):
+    soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    soc.connect((host, port))
+    return soc
+
+def getIndexCaseInSensitive(source, target):
+    sourceUpper = source.upper()
+    targetUpper = target.upper()
+    if (targetUpper in sourceUpper):
+        return sourceUpper.index(targetUpper)
+    else:
+        return -1
+
+# State machine functions
+###################################################################################################
+
+def startStateMachine(initialState):
+    currentState = 0
+
+    while (True):
+        if (not currentState): currentState = initialState
+        currentState = invokeState(currentState)
+        if (not currentState): break
+
+def invokeState(state):
+    stateName = state["name"]
+    if (stateName == "seekStart"):
+        return stateSeekStart(state)
+    elif (stateName == "seekEnd"):
+        return stateSeekEnd(state)
+    elif (stateName == "sendToRtvm"):
+        return stateSendToRtvm(state)
+    elif (stateName == "receiveFromRtvm"):
+        return stateReceiveFromRtvm(state)
+
+def stateSeekStart(state):
+    resourceResponse = resourceSocket.recv(1024).decode("UTF-8")
+    startIndex = getIndexCaseInSensitive(resourceResponse, "<HTML>")
+
+    if (startIndex < 0):
+        return { "name": "seekStart" }
+    else:
+        resourceFragment = resourceResponse[startIndex:]
+        endIndex = getIndexCaseInSensitive(resourceFragment, "</HTML>")
+        if (endIndex >= 0):
+            return { "name": "sendToRtvm", "resourceContent": resourceFragment[:endIndex + 7] }
+        else:
+            return { "name": "seekEnd", "resourceFragment": resourceFragment }
+
+def stateSeekEnd(state):
+    resourceFragment = state["resourceFragment"]
+    resourceResponse = resourceSocket.recv(1024).decode("UTF-8")
+    resourceFragment = resourceFragment + resourceResponse
+
+    endIndex = getIndexCaseInSensitive(resourceFragment, "</HTML>")
+    if (endIndex >= 0):
+        return { "name": "sendToRtvm", "resourceContent": resourceFragment[:endIndex + 7] }
+    else:
+        return { "name": "seekEnd", "resourceFragment": resourceFragment }
+
+def stateSendToRtvm(state):
+    resourceContent = state["resourceContent"]
+    rtvmSocket.send(resourceContent.encode("UTF-8"))
+    return { "name": "receiveFromRtvm" }
+
+def stateReceiveFromRtvm(state):
+    rtvmResponse = rtvmSocket.recv(1024).decode("ASCII")
+    responseEndedIndex = getIndexCaseInSensitive(rtvmResponse, "COMP173")
+
+    if (responseEndedIndex >= 0):
+        print(rtvmResponse[:responseEndedIndex], end='')
+        return 0 # We're done; Exit from the state machine.
+    else:
+        print(rtvmResponse, end='')
+        return state
+
+# Main program
+###################################################################################################
+
+# Create RTVM socker
+rtvmSocket = getSocket("rtvm.cs.camosun.bc.ca", 10010)
+rtvmResponse = rtvmSocket.recv(1024)
+
+# Exit if RTVM is not READY
+if (rtvmResponse != b'READY'):
+    print("RTVM NOT READY!!!")
+    print(rtvmResponse)
+    sys.exit(0)
+
+# Parse command arguments for request info
+requestInfo = getRequestInfo()
+
+# Open resource socket from request info
+resourceSocket = getSocket(requestInfo["host"], 80)
+resourceSocket.send(("GET " + requestInfo["resource"] + " HTTP/1.1\n" + "Host: " + requestInfo["host"] + "\n\n").encode("UTF-8"))
+
+# Process resource with RTVM via a state machine
+startStateMachine({ "name": "seekStart" })
+
+# CLeanup
+resourceSocket.close()
+rtvmSocket.close()
+sys.exit(0)
