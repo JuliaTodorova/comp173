@@ -1,4 +1,8 @@
 import socket, sys, os
+GET_RESOURCE = 1
+TRANSCODE = 2
+PRINTING = 3
+DONE = 4
 
 URL = sys.argv[1]
 splitURL = URL.split("/")
@@ -17,48 +21,46 @@ s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s2.connect( ("rtvm.cs.camosun.bc.ca", 10010) )
 data = s2.recv(1024)
 
-state = 1
+state = GET_RESOURCE
 previous = ""
 
-while (state != 4):
-	if (state == 1): 
+while (state != DONE):
+	if (state == GET_RESOURCE): 
 		current = s1.recv(1024).decode("UTF-8")
-		if ("<HTML>" in (previous + current).upper()):
-			tag = (previous + current).upper().index("<HTML>")
-			send = (previous + current)[tag:]
-			state = 2
-			previous = send
+		current_window = previous + current
+		if ("<HTML>" in current_window.upper()):
+			tag_index = current_window.upper().index("<HTML>")
+			previous = current_window[tag_index:]
+			state = TRANSCODE
 			
 			if ("</HTML>" in (previous).upper()):
-				tag = previous.upper().index("</HTML>")
-				send = previous[:tag + 7]
-				s2.send(send.encode("UTF-8"))
-				state = 3
+				tag_index = previous.upper().index("</HTML>")
+				s2.send(previous[:tag_index + 7].encode("UTF-8"))
+				state = PRINTING
 				previous = ""
-		else:
-			previous = current
 			
-	elif (state == 2): 
+	elif (state == TRANSCODE): 
 			current = s1.recv(1024).decode("UTF-8")
-			if ("</HTML>" in (previous + current).upper()):
-				tag = (previous+current).upper().index("</HTML>")
-				send = (previous+current)[:tag + 7]
-				s2.send(send.encode("UTF-8"))
-				state = 3
+			current_window = previous + current
+			if ("</HTML>" in current_window.upper()):
+				tag_index = current_window.upper().index("</HTML>")
+				s2.send(current_window[:tag_index + 7].encode("UTF-8"))
+				state = PRINTING
 				previous = ""
 			else:
 				s2.send(previous.encode("UTF-8"))
 				previous = current
-	elif (state == 3): 
+				
+	elif (state == PRINTING): 
 		current = s2.recv(1024).decode("ASCII")
-		if ("COMP173" in (previous+current).upper()):
-			tag = (previous+current).upper().index("COMP173")
-			print((previous+current)[:tag], end='')
-			state = 4
+		current_window = previous + current
+		if ("COMP173" in current_window.upper()):
+			tag_index = current_window.upper().index("COMP173")
+			print(current_window[:tag_index], end='')
+			state = DONE
 		else:
 			print(previous, end='')
 			previous = current
 			
 s1.close()
 s2.close()
-			
